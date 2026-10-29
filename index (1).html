@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#16845b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>MiniPedidos | Abarrotes y verduras</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header><div class="top">
+  <div class="brand"><div class="logo">✓</div><div><h1>MiniPedidos</h1><p>Pedidos rápidos y organizados</p></div></div>
+  <nav class="nav">
+    <button id="navShop" class="active" onclick="showPage('shop')">🛍️ Tienda</button>
+    <button id="navCart" onclick="showPage('cart')">📦 Mi pedido <span id="cartCount" class="badge">0</span></button>
+    <button id="navOrders" onclick="showPage('orders')">📋 Mis pedidos</button>
+    <button id="navAdmin" onclick="showPage('admin')">🏪 Vendedor <span id="pendingBadge" class="badge alert hidden">0</span></button>
+  </nav>
+</div></header>
+
+<main>
+<!-- ============ TIENDA ============ -->
+<section id="pageShop">
+  <div class="panel seller-storefront" style="margin-bottom:18px">
+    <div class="seller-profile-row">
+      <div class="seller-avatar">🏪</div>
+      <div class="seller-profile-info"><span class="category">TIENDA / VENDEDOR</span><h2 id="storefrontName">Mi tienda de abarrotes</h2><p id="storefrontAddress" class="muted"></p><p id="storefrontPhone" class="muted"></p></div>
+    </div>
+    <div class="seller-profile-actions"><a id="sellerMapLink" class="btn secondary small hidden" target="_blank" rel="noopener">📍 Ver ubicación en Google Maps</a><a id="sellerWhatsAppLink" class="btn primary small hidden" target="_blank" rel="noopener">💬 Contactar vendedor</a></div>
+  </div>
+  <div class="panel" style="margin-bottom:18px">
+    <h3 style="margin:0 0 6px">📞 ¿Tienes dudas? Consúltanos</h3>
+    <p class="muted" style="font-size:13px;margin:0 0 12px">Llama o escríbenos por WhatsApp para consultar precios, disponibilidad o tu pedido.</p>
+    <div id="contactCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px"></div>
+  </div>
+  <div class="hero"><div><h2>Compra fácil, sin confusiones.</h2><p>Explora los productos de la tienda, elige las cantidades (hasta por medio kilo) y envía tu pedido en unos pasos. Después podrás ver su estado en “Mis pedidos”.</p></div><div class="hero-icon">🛍️</div></div>
+  <div class="toolbar"><input id="search" placeholder="Buscar producto..." oninput="renderProducts()"><select id="categoryFilter" onchange="renderProducts()"><option value="">Todas las categorías</option><option>Abarrotes</option><option>Bebidas</option><option>Lácteos</option><option>Limpieza</option><option>Snacks</option><option>Verduras</option><option>Frutas</option><option>Otros</option></select></div>
+  <div class="section-title"><h2>Catálogo de abarrotes, frutas y verduras</h2><span class="muted" id="productCount"></span></div>
+  <div id="products" class="products"></div>
+</section>
+
+<!-- ============ MI PEDIDO ============ -->
+<section id="pageCart" class="hidden">
+  <div class="section-title"><h2>Tu pedido</h2><button class="btn secondary small" onclick="showPage('shop')">← Seguir comprando</button></div>
+  <div class="layout">
+    <div class="panel">
+      <h3>Productos seleccionados</h3>
+      <div id="cartItems"></div>
+      <div class="sum-row"><span>Subtotal</span><span id="sumSub">Bs 0,00</span></div>
+      <div class="sum-row"><span>Envío</span><span id="sumFee">—</span></div>
+      <div class="cart-total"><span>Total estimado</span><span id="cartTotal">Bs 0,00</span></div>
+      <p class="muted" style="font-size:12px;margin:0">El vendedor confirmará disponibilidad y el total final (los pesos pueden variar un poco).</p>
+    </div>
+    <div class="panel">
+      <h3>Datos del cliente</h3>
+      <form id="orderForm" onsubmit="submitOrder(event)">
+        <div class="field"><label for="customerName">Nombre completo *</label><input id="customerName" required placeholder="Tu nombre" autocomplete="name"></div>
+        <div class="field"><label for="customerPhone">Teléfono / WhatsApp *</label><input id="customerPhone" required type="tel" placeholder="Ej. 70000000" autocomplete="tel"></div>
+
+        <div class="field"><label>¿Cómo quieres recibirlo?</label>
+          <div class="choice">
+            <label><input type="radio" name="deliv" value="pickup" checked onchange="renderCartSummary()"> 🏪 Recojo en tienda</label>
+            <label><input type="radio" name="deliv" value="delivery" onchange="renderCartSummary()"> 🛵 Delivery</label>
+          </div>
+        </div>
+
+        <div id="deliveryBlock" class="hidden">
+          <div class="field"><label for="customerAddress">Dirección o zona *</label><input id="customerAddress" placeholder="Barrio, calle o referencia" autocomplete="street-address"></div>
+          <div class="field"><label>📍 Marca tu ubicación en el mapa (opcional si escribiste la dirección)</label>
+            <p class="map-help">Toca el mapa para marcar dónde quieres recibir el pedido, o usa el botón para localizarte.</p>
+            <div id="deliveryMap"></div>
+            <div class="map-actions"><button class="btn secondary small" type="button" onclick="deliveryPicker.locate()">◎ Usar mi ubicación</button><button class="btn secondary small" type="button" onclick="deliveryPicker.clear()">Quitar marca</button></div>
+            <div id="mapSelection" class="map-help">Todavía no elegiste una ubicación.</div>
+          </div>
+        </div>
+
+        <div class="field"><label>Forma de pago</label>
+          <div class="choice">
+            <label><input type="radio" name="pay" value="Efectivo" checked onchange="renderCartSummary()"> 💵 Efectivo</label>
+            <label><input type="radio" name="pay" value="QR" onchange="renderCartSummary()"> 📱 QR</label>
+            <label><input type="radio" name="pay" value="Transferencia" onchange="renderCartSummary()"> 🏦 Transferencia</label>
+          </div>
+          <div id="payInfo" class="pay-box"></div>
+        </div>
+
+        <div class="field"><label for="customerNotes">Nota del pedido</label><textarea id="customerNotes" placeholder="Algún detalle adicional..."></textarea></div>
+        <label class="check"><input type="checkbox" id="rememberMe" checked> Recordar mis datos para la próxima vez</label>
+        <button class="btn primary" type="submit" style="width:100%">Enviar pedido por WhatsApp</button>
+        <div class="notice">Tu pedido se guarda y se abre WhatsApp con el detalle para enviarlo al vendedor. Podrás seguir su estado en <b>Mis pedidos</b>.</div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MIS PEDIDOS ============ -->
+<section id="pageOrders" class="hidden">
+  <div class="section-title"><h2>Mis pedidos</h2><button class="btn secondary small" onclick="showPage('shop')">← Volver a la tienda</button></div>
+  <div id="myOrdersList"></div>
+</section>
+
+<!-- ============ VENDEDOR ============ -->
+<section id="pageAdmin" class="hidden">
+  <div class="section-title"><h2>Panel del vendedor</h2>
+    <div class="seller-profile-actions"><button class="btn secondary small" id="changePinBtn" onclick="openChangePin()">🔑 Cambiar PIN</button><button class="btn danger small" onclick="logoutAdmin()">Cerrar sesión</button></div>
+  </div>
+  <div id="modeNotice" class="notice"></div>
+  <div class="layout">
+    <div class="panel"><h3 id="productFormTitle">Agregar producto</h3>
+      <form id="productForm" onsubmit="saveProduct(event)">
+        <input type="hidden" id="editProductId">
+        <div class="field-grid"><div class="field"><label>Nombre del producto *</label><input id="prodName" required placeholder="Ej. Arroz 1 kg"></div><div class="field"><label>Precio (Bs) *</label><input id="prodPrice" type="number" min="0.01" step="0.01" required placeholder="12.50"></div></div>
+        <div class="field-grid"><div class="field"><label>Categoría</label><select id="prodCategory"><option>Abarrotes</option><option>Bebidas</option><option>Lácteos</option><option>Limpieza</option><option>Snacks</option><option>Verduras</option><option>Frutas</option><option>Otros</option></select></div><div class="field"><label>Stock disponible (unidades o kilos)</label><input id="prodStock" type="number" min="0" step="0.25" value="20"></div></div>
+        <label class="check"><input type="checkbox" id="prodWeight"> Se vende por peso (el cliente puede pedir 250 g, medio kilo, 1 kg...). El precio es por kilo.</label>
+        <div class="field-grid"><div class="field"><label>Emoji (si no tienes foto)</label><input id="prodEmoji" maxlength="5" placeholder="🛒"></div><div class="field"><label>Unidad / detalle</label><input id="prodUnit" placeholder="1 kg, botella, paquete..."></div></div>
+        <div class="field"><label>Foto del producto</label><div id="productImagePreview" class="image-preview">Vista previa de la foto</div>
+          <div class="field-grid"><div class="field"><label for="prodImageGallery">Elegir de galería</label><input id="prodImageGallery" type="file" accept="image/*" onchange="handleProductImage(event)"></div><div class="field"><label for="prodImageCamera">Tomar foto</label><input id="prodImageCamera" type="file" accept="image/*" capture="environment" onchange="handleProductImage(event)"></div></div>
+          <button class="btn secondary small" type="button" onclick="removeProductImage()">Quitar foto</button>
+          <p class="role-note">La foto se reduce automáticamente para que la aplicación no ocupe mucho espacio. Sin foto se muestra el emoji.</p></div>
+        <button class="btn primary" type="submit">Guardar producto</button> <button class="btn secondary hidden" id="cancelEdit" type="button" onclick="resetProductForm()">Cancelar edición</button>
+      </form>
+
+      <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
+      <h3>Perfil público del vendedor</h3>
+      <p class="role-note">Estos datos aparecen en la vista del cliente.</p>
+      <div class="field"><label for="businessName">Nombre de la tienda / vendedor</label><input id="businessName" placeholder="Ej. Abarrotes Don José"></div>
+      <div class="field"><label for="businessPhone">WhatsApp que recibe los pedidos *</label><input id="businessPhone" type="tel" placeholder="59172558658"></div>
+      <p class="muted" style="font-size:12px;margin-top:-4px">Con código de país, sin + ni espacios. Para Bolivia comienza con 591.</p>
+      <div class="field-grid"><div class="field"><label for="contact1">Teléfono de consultas 1</label><input id="contact1" type="tel" placeholder="72558658"></div><div class="field"><label for="contact2">Teléfono de consultas 2</label><input id="contact2" type="tel" placeholder="67861272"></div></div>
+      <div class="field"><label for="businessAddress">Dirección o zona del vendedor</label><input id="businessAddress" placeholder="Barrio, calle, mercado o referencia"></div>
+      <div class="field"><label for="deliveryFee">Costo de envío por delivery (Bs)</label><input id="deliveryFee" type="number" min="0" step="0.5" placeholder="0"></div>
+      <div class="field"><label for="payNote">Datos para pago por transferencia (banco, cuenta, titular)</label><textarea id="payNote" placeholder="Ej. Banco X — Cta. 000000 — Titular: ..."></textarea></div>
+      <div class="field"><label>Imagen del QR de pago</label><div id="qrPreview" class="image-preview">Sin QR</div><input id="qrFile" type="file" accept="image/*" onchange="handleQrImage(event)"><button class="btn secondary small" type="button" style="margin-top:6px;align-self:flex-start" onclick="removeQr()">Quitar QR</button></div>
+      <div class="field"><label>📍 Ubicación de la tienda</label><p class="map-help">Toca el mapa para marcar dónde está tu negocio, o usa tu ubicación actual.</p><div id="sellerMap" style="height:260px;width:100%;border-radius:12px;border:1px solid var(--line)"></div><div class="map-actions"><button class="btn secondary small" type="button" onclick="sellerPicker.locate()">◎ Usar mi ubicación</button><button class="btn secondary small" type="button" onclick="sellerPicker.clear()">Quitar marca</button></div><div id="sellerMapSelection" class="map-help">Ubicación de tienda no marcada.</div></div>
+      <button class="btn primary" onclick="saveSettings()">Guardar perfil del vendedor</button>
+    </div>
+    <div class="panel"><h3>Resumen</h3>
+      <div class="field-grid"><div class="notice"><b id="adminProducts">0</b><br>Productos en catálogo</div><div class="notice"><b id="adminPending">0</b><br>Pedidos pendientes</div></div>
+      <h3 style="margin-top:18px">Productos actuales</h3><div id="adminProductList"></div>
+    </div>
+  </div>
+  <div class="section-title"><h2>Pedidos recibidos <span class="muted" style="font-size:14px" id="adminOrders"></span></h2><button class="btn danger small" onclick="clearOrders()">Borrar historial</button></div>
+  <div id="ordersList" class="panel"></div>
+</section>
+
+<div class="foot">
+  <div id="footContacts"></div>
+  MiniPedidos · Proyecto productivo de Sistemas Informáticos · La Guardia, Bolivia<br>
+  <button id="installBtn" class="btn secondary small hidden" onclick="installApp()">📲 Instalar como app</button>
+</div>
+</main>
+
+<div id="modalHost"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
